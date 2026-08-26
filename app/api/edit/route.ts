@@ -3,16 +3,16 @@ type Operation={find:string;replace:string};
 const decode=(s:string)=>s.replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)));
 function visible(html:string){const body=html.split(/<body[^>]*>/i)[1]?.split(/<\/body>/i)[0]||html;return decode(body.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()).slice(0,40000);}
 function decodeEntityAt(s:string):{ch:string;len:number}|null{const m=/^&(nbsp|amp|lt|gt|#(\d+));/i.exec(s);if(!m)return null;const ch=m[2]?String.fromCharCode(Number(m[2])):m[1].toLowerCase()==='nbsp'?' ':m[1].toLowerCase()==='amp'?'&':m[1].toLowerCase()==='lt'?'<':'>';return{ch,len:m[0].length};}
-function buildFlat(html:string){const flat:string[]=[];const rawStart:number[]=[];let i=0;const n=html.length;let pendingSpace=false;let spaceRawStart=-1;const flush=()=>{if(pendingSpace){flat.push(' ');rawStart.push(spaceRawStart);pendingSpace=false;}};
+function buildFlat(html:string){const flat:string[]=[];const rawStart:number[]=[];const rawLen:number[]=[];let i=0;const n=html.length;let pendingSpace=false;let spaceRawStart=-1;let spaceRawEnd=-1;const flush=()=>{if(pendingSpace){flat.push(' ');rawStart.push(spaceRawStart);rawLen.push(spaceRawEnd-spaceRawStart);pendingSpace=false;}};
   while(i<n){const c=html[i];
     if(c==='<'){const end=html.indexOf('>',i);i=end===-1?n:end+1;continue;}
-    if(c==='&'){const dec=decodeEntityAt(html.slice(i,i+12));if(dec){if(/\s/.test(dec.ch)){if(!pendingSpace){pendingSpace=true;spaceRawStart=i;}}else{flush();flat.push(dec.ch);rawStart.push(i);}i+=dec.len;continue;}}
-    if(/\s/.test(c)){if(!pendingSpace){pendingSpace=true;spaceRawStart=i;}i++;continue;}
-    flush();flat.push(c);rawStart.push(i);i++;
+    if(c==='&'){const dec=decodeEntityAt(html.slice(i,i+12));if(dec){if(/\s/.test(dec.ch)){if(!pendingSpace){pendingSpace=true;spaceRawStart=i;}spaceRawEnd=i+dec.len;}else{flush();flat.push(dec.ch);rawStart.push(i);rawLen.push(dec.len);}i+=dec.len;continue;}}
+    if(/\s/.test(c)){if(!pendingSpace){pendingSpace=true;spaceRawStart=i;}spaceRawEnd=i+1;i++;continue;}
+    flush();flat.push(c);rawStart.push(i);rawLen.push(1);i++;
   }
-  flush();return{flat:flat.join(''),rawStart,endRaw:n};
+  flush();return{flat:flat.join(''),rawStart,rawLen};
 }
-function applyVisible(html:string,op:Operation){const find=op.find.trim().replace(/\s+/g,' ');if(!find)return html;const{flat,rawStart,endRaw}=buildFlat(html);const idx=flat.indexOf(find);if(idx===-1)return html;const startRaw=rawStart[idx];const lastCharIdx=idx+find.length-1;const endRawPos=lastCharIdx+1<rawStart.length?rawStart[lastCharIdx+1]:endRaw;return html.slice(0,startRaw)+op.replace+html.slice(endRawPos);}
+function applyVisible(html:string,op:Operation){const find=op.find.trim().replace(/\s+/g,' ');if(!find)return html;const{flat,rawStart,rawLen}=buildFlat(html);const idx=flat.indexOf(find);if(idx===-1)return html;const startRaw=rawStart[idx];const lastCharIdx=idx+find.length-1;const endRawPos=rawStart[lastCharIdx]+rawLen[lastCharIdx];return html.slice(0,startRaw)+op.replace+html.slice(endRawPos);}
 export async function POST(request:Request){
   if(await readRole()!=='admin')return Response.json({error:'管理者のみ利用できます'},{status:403});
   if(!process.env.OPENAI_API_KEY)return Response.json({error:'GPT APIキーがまだ設定されていません'},{status:503});
