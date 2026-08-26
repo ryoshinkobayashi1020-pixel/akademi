@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 export const MAIN_DOC = 1;
-export const MATERIALS_DOC = 2;
+export const MATERIALS_20_DOC = 2;
+export const MATERIALS_21_DOC = 3;
 
 function client() {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {

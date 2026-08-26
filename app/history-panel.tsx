@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 
 type Revision = { id: number; summary: string; created_at: string };
 
-export default function HistoryPanel({ target, onRestored }: { target: 'main' | 'materials'; onRestored: () => void }) {
+export default function HistoryPanel({ target, onRestored }: { target: 'main' | 'materials20' | 'materials21'; onRestored: () => void }) {
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);

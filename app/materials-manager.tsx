@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useState } from 'react';
 
 type Item = { section: string; label: string; url: string };
 
-export default function MaterialsManager({ onChanged }: { onChanged: () => void }) {
+export default function MaterialsManager({ target, label: buttonLabel, onChanged }: { target: '20' | '21'; label: string; onChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [section, setSection] = useState('');
@@ -12,20 +12,20 @@ export default function MaterialsManager({ onChanged }: { onChanged: () => void 
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const res = await fetch('/api/materials/manage');
+    const res = await fetch(`/api/materials/manage?target=${target}`);
     const data = (await res.json()) as { items?: Item[] };
     setItems(data.items || []);
   }
 
   useEffect(() => {
     if (open) load();
-  }, [open]);
+  }, [open, target]);
 
   async function add(e: FormEvent) {
     e.preventDefault();
     if (!section.trim() || !label.trim() || !url.trim() || busy) return;
     setBusy(true);
-    await fetch('/api/materials/manage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section, label, url }) });
+    await fetch('/api/materials/manage', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section, label, url, target }) });
     setLabel('');
     setUrl('');
     await load();
@@ -37,7 +37,7 @@ export default function MaterialsManager({ onChanged }: { onChanged: () => void 
     if (busy) return;
     if (!confirm(`「${item.label}」を削除しますか？`)) return;
     setBusy(true);
-    await fetch('/api/materials/manage', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: item.label, url: item.url }) });
+    await fetch('/api/materials/manage', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: item.label, url: item.url, target }) });
     await load();
     onChanged();
     setBusy(false);
@@ -45,7 +45,7 @@ export default function MaterialsManager({ onChanged }: { onChanged: () => void 
 
   return (
     <div className="materials-manager">
-      <button className="pill" onClick={() => setOpen((v) => !v)}>資料管理</button>
+      <button className="pill" onClick={() => setOpen((v) => !v)}>{buttonLabel}</button>
       {open && (
         <div className="materials-dropdown">
           <form className="materials-add-form" onSubmit={add}>
