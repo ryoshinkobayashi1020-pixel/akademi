@@ -10,6 +10,8 @@ export default function MaterialsManager({ target, label: buttonLabel, onChanged
   const [label, setLabel] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeResult, setAnalyzeResult] = useState('');
 
   async function load() {
     const res = await fetch(`/api/materials/manage?target=${target}`);
@@ -43,6 +45,16 @@ export default function MaterialsManager({ target, label: buttonLabel, onChanged
     setBusy(false);
   }
 
+  async function analyze() {
+    if (analyzing) return;
+    setAnalyzing(true);
+    setAnalyzeResult('資料を読み込んでいます…');
+    const res = await fetch('/api/materials/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ target }) });
+    const data = (await res.json()) as { total?: number; ok?: number; error?: string };
+    setAnalyzeResult(data.error || `${data.total ?? 0}件中${data.ok ?? 0}件を読み込みました`);
+    setAnalyzing(false);
+  }
+
   return (
     <div className="materials-manager">
       <button className="pill" onClick={() => setOpen((v) => !v)}>{buttonLabel}</button>
@@ -57,6 +69,10 @@ export default function MaterialsManager({ target, label: buttonLabel, onChanged
             <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" />
             <button disabled={busy || !section.trim() || !label.trim() || !url.trim()}>追加</button>
           </form>
+          <button type="button" className="materials-analyze" disabled={analyzing} onClick={analyze}>
+            {analyzing ? '分析中…' : 'Google Driveの資料を読み込んで分析'}
+          </button>
+          {analyzeResult && <p className="materials-analyze-result">{analyzeResult}</p>}
           <div className="materials-list">
             {items.length === 0 && <p className="history-empty">資料はまだありません</p>}
             {items.map((it, i) => (

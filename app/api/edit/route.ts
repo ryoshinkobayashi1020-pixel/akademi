@@ -1,4 +1,4 @@
-import { readRole } from '../../auth'; import { currentDocument, saveDocument, MAIN_DOC, MATERIALS_20_DOC, MATERIALS_21_DOC } from '../../document-store'; import { parseMaterials } from '../../materials-data';
+import { readRole } from '../../auth'; import { currentDocument, saveDocument, MAIN_DOC, MATERIALS_20_DOC, MATERIALS_21_DOC } from '../../document-store'; import { parseMaterials, MaterialItem } from '../../materials-data'; import { peekMaterialTexts } from '../../material-text';
 type Operation={find:string;replace:string};
 const decode=(s:string)=>s.replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)));
 function visible(html:string){const body=html.split(/<body[^>]*>/i)[1]?.split(/<\/body>/i)[0]||html;return decode(body.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()).slice(0,40000);}
@@ -20,10 +20,18 @@ export async function POST(request:Request){
   const docId=target==='materials21'?MATERIALS_21_DOC:target==='materials20'?MATERIALS_20_DOC:MAIN_DOC;
   const html=await currentDocument(request,docId);
   let materialsContext='';
-  if(docId===MAIN_DOC){
-    const [html20,html21]=await Promise.all([currentDocument(request,MATERIALS_20_DOC),currentDocument(request,MATERIALS_21_DOC)]);
-    const materials=[...parseMaterials(html20).map(m=>({...m,page:'/api/materials/20'})),...parseMaterials(html21).map(m=>({...m,page:'/api/materials/21'}))];
-    if(materials.length)materialsContext=`\n\n参考資料一覧（このプロジェクトに登録済みの資料。タイトルとURLのみで本文までは読めないので、事実関係の裏付けではなくタイトルからの推測・言及・リンク付けの参考として使ってください）:\n${materials.map(m=>`- [${m.section}] ${m.label}: ${m.url} (一覧ページ: ${m.page})`).join('\n')}`;
+  {
+    let materials:Array<MaterialItem&{page:string}>;
+    if(docId===MAIN_DOC){
+      const [html20,html21]=await Promise.all([currentDocument(request,MATERIALS_20_DOC),currentDocument(request,MATERIALS_21_DOC)]);
+      materials=[...parseMaterials(html20).map(m=>({...m,page:'/api/materials/20'})),...parseMaterials(html21).map(m=>({...m,page:'/api/materials/21'}))];
+    }else{
+      materials=parseMaterials(html).map(m=>({...m,page:docId===MATERIALS_21_DOC?'/api/materials/21':'/api/materials/20'}));
+    }
+    if(materials.length){
+      const texts=await peekMaterialTexts(materials.map(m=>m.url));
+      materialsContext=`\n\n参考資料一覧（このプロジェクトに登録済みの資料。読み込み済みのものは内容の抜粋も付けています。読み込んでいないものはタイトルとURLのみで本文までは読めないので、推測・言及・リンク付けの参考程度に使ってください）:\n${materials.map(m=>{const text=texts.get(m.url);return`- [${m.section}] ${m.label}: ${m.url} (一覧ページ: ${m.page})${text?`\n  抜粋: ${text.slice(0,500)}`:''}`;}).join('\n')}`;
+    }
   }
   const devPrompt='This document is an official 事業計画書 (business-plan proposal) for a 青年会議所 (JC / Junior Chamber, a civic young-leaders organization). Write and edit any generated Japanese text — summaries, background, purpose, effects, wording changes — in the formal, civic-minded, community-development-oriented register expected in a JC business plan submitted for board deliberation (議案), not generic casual business copy. You edit this Japanese business-plan document (or one of its two materials-list pages: 20番/審議対象資料 at /api/materials/20, 21番/参考資料 at /api/materials/21). Return exact visible-text replacements. Each find must be copied verbatim (character-for-character, including spacing) from the supplied document, be unique, and under 180 characters. Preserve facts unless instructed. Use multiple operations when needed. If the instruction asks to add a hyperlink, set replace to HTML like <a href="URL" target="_blank">LABEL</a> — inserted right after the matched find text. Choosing the URL: if the instruction names or clearly points to one specific material from the supplied list, use that material\'s exact URL. If the instruction refers to the 20番/審議対象資料 materials page in general, use /api/materials/20; if it refers to the 21番/参考資料 materials page in general, use /api/materials/21. If the instruction gives an explicit URL, use that. Never guess or substitute an unrelated material\'s URL — if unsure which of the two list pages is meant, ask yourself which item number (20 or 21) the instruction is near, and link there instead of guessing a specific file. A list of the project’s registered reference materials (title + URL only) may be supplied for context; you cannot read their actual file content.';
   const schema={type:'json_schema',name:'document_edit',strict:true,schema:{type:'object',additionalProperties:false,properties:{summary:{type:'string'},operations:{type:'array',items:{type:'object',additionalProperties:false,properties:{find:{type:'string'},replace:{type:'string'}},required:['find','replace']}}},required:['summary','operations']}} as const;
