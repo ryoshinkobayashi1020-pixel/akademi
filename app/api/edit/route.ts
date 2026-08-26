@@ -13,7 +13,7 @@ function buildFlat(html:string){const flat:string[]=[];const rawStart:number[]=[
   flush();return{flat:flat.join(''),rawStart,rawLen};
 }
 function applyVisible(html:string,op:Operation){const find=op.find.trim().replace(/\s+/g,' ');if(!find)return html;const{flat,rawStart,rawLen}=buildFlat(html);const idx=flat.indexOf(find);if(idx===-1)return html;const startRaw=rawStart[idx];const lastCharIdx=idx+find.length-1;const endRawPos=rawStart[lastCharIdx]+rawLen[lastCharIdx];return html.slice(0,startRaw)+op.replace+html.slice(endRawPos);}
-function structurallySane(html:string){for(const t of['h1','h2','ul']){const opens=(html.match(new RegExp(`<${t}[ >]`,'gi'))||[]).length;const closes=(html.match(new RegExp(`</${t}>`,'gi'))||[]).length;if(opens!==closes)return false;}return true;}
+function structurallySane(html:string){for(const t of['h1','h2','ul']){const opens=(html.match(new RegExp(`<${t}[ >]`,'gi'))||[]).length;const closes=(html.match(new RegExp(`</${t}>`,'gi'))||[]).length;if(opens!==closes)return false;}if(/<a\b[^>]*>\s*<\/a>/i.test(html))return false;if(/<li>\s*<\/li>/i.test(html))return false;return true;}
 export async function POST(request:Request){
   if(await readRole()!=='admin')return Response.json({error:'管理者のみ利用できます'},{status:403});
   if(!process.env.OPENAI_API_KEY)return Response.json({error:'GPT APIキーがまだ設定されていません'},{status:503});
