@@ -26,9 +26,12 @@ async function fetchAndExtract(url: string): Promise<{ content: string | null; s
     return { content: null, status: 'fetch-failed' };
   }
   if (!res.ok) return { content: null, status: `http-${res.status}` };
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('pdf')) return { content: null, status: 'not-pdf-or-not-public' };
   const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    const asText = buf.subarray(0, 200).toString('utf8');
+    if (asText.includes('<html') || asText.includes('Google Drive')) return { content: null, status: 'not-public-or-confirm-page' };
+    return { content: null, status: 'not-pdf' };
+  }
   try {
     const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: buf });
