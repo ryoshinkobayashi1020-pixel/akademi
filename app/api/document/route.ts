@@ -1,0 +1,2 @@
+import { readRole } from '../../auth'; import { currentDocument } from '../../document-store';
+export async function GET(request:Request){ if(!await readRole())return new Response('Unauthorized',{status:401}); let html=await currentDocument(request); html=html.replace(/<head>/i,'<head><base href="/document/">'); return new Response(html,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'self' 'unsafe-inline' data:; frame-ancestors 'self'"}}); }

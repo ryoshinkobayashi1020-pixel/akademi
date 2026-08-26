@@ -1,0 +1,3 @@
+import { redirect } from 'next/navigation'; import { readRole } from '../auth'; import LogoutButton from '../logout-button'; import SwitchRoleButton from '../switch-role-button';
+export const dynamic='force-dynamic';
+export default async function Viewer(){ const role=await readRole(); if(!role) redirect('/'); return <main className="viewer-page"><header className="topbar"><div className="brand"><h1>2026年11月事業計画書</h1><p>アカデミー｜閲覧ページ</p></div><div className="top-actions">{role==='admin'&&<SwitchRoleButton label="管理画面"/>}<LogoutButton/></div></header><section className="viewer-body"><iframe className="document-frame" src="/api/document" title="事業計画書"/></section></main>; }
