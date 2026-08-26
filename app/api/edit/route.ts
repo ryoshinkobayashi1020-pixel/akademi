@@ -1,4 +1,5 @@
-import { readRole } from '../../auth'; import { currentDocument, saveDocument, MAIN_DOC, MATERIALS_20_DOC, MATERIALS_21_DOC } from '../../document-store'; import { parseMaterials, MaterialItem } from '../../materials-data'; import { peekMaterialTexts } from '../../material-text';
+import { readRole } from '../../auth'; import { currentDocument, saveDocument, MAIN_DOC, MATERIALS_20_DOC, MATERIALS_21_DOC } from '../../document-store'; import { parseMaterials, MaterialItem } from '../../materials-data'; import { getMaterialTexts } from '../../material-text';
+export const maxDuration=60;
 type Operation={find:string;replace:string};
 const decode=(s:string)=>s.replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(Number(n)));
 function visible(html:string){const body=html.split(/<body[^>]*>/i)[1]?.split(/<\/body>/i)[0]||html;return decode(body.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()).slice(0,40000);}
@@ -30,7 +31,7 @@ export async function POST(request:Request){
       materials=parseMaterials(html).map(m=>({...m,page:docId===MATERIALS_21_DOC?'/api/materials/21':'/api/materials/20'}));
     }
     if(materials.length){
-      const texts=await peekMaterialTexts(materials.map(m=>m.url));
+      const texts=await getMaterialTexts(materials.map(m=>m.url));
       materialsContext=`\n\n参考資料一覧（このプロジェクトに登録済みの資料。「抜粋」が付いているものは実際に読み込んだ本文の抜粋です。事業の背景・目的・効果などの実質的な文章を作成・修正する際は、関連する抜粋があれば必ずその内容（数値・事実）を踏まえて書いてください。抜粋のない項目はタイトルとURLのみで本文までは読めないため、推測・言及・リンク付けの参考程度に留めてください）:\n${materials.map(m=>{const text=texts.get(m.url);return`- [${m.section}] ${m.label}: ${m.url} (一覧ページ: ${m.page})${text?`\n  抜粋: ${text.slice(0,500)}`:''}`;}).join('\n')}`;
     }
   }

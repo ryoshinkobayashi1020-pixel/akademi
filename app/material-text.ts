@@ -62,3 +62,31 @@ export async function peekMaterialTexts(urls: string[]): Promise<Map<string, str
   }
   return results;
 }
+
+/** Reads cached text, and for URLs never analyzed before (no cache row at all), fetches+extracts live. Skips URLs that were already attempted and failed, so failures don't get retried on every request. */
+export async function getMaterialTexts(urls: string[]): Promise<Map<string, string>> {
+  const driveUrls = [...new Set(urls.filter(isDriveUrl))];
+  if (!driveUrls.length) return new Map();
+  const supabase = client();
+  const { data } = await supabase.from('material_texts').select('url, content').in('url', driveUrls);
+  const cached = new Map((data ?? []).map((row) => [row.url as string, row.content as string | null]));
+  const results = new Map<string, string>();
+  const toFetch: string[] = [];
+  for (const url of driveUrls) {
+    if (cached.has(url)) {
+      const content = cached.get(url);
+      if (content) results.set(url, content);
+    } else {
+      toFetch.push(url);
+    }
+  }
+  if (toFetch.length) {
+    await Promise.all(
+      toFetch.map(async (url) => {
+        const { content } = await refreshMaterialText(url);
+        if (content) results.set(url, content);
+      }),
+    );
+  }
+  return results;
+}
