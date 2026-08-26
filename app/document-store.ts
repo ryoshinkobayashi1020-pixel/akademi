@@ -19,3 +19,18 @@ export async function saveDocument(html: string, summary: string) {
   await supabase.from('revisions').insert({ html, summary, created_at: now });
   await supabase.from('documents').upsert({ id: 1, html, updated_at: now });
 }
+
+export async function listRevisions() {
+  const { data } = await client()
+    .from('revisions')
+    .select('id, summary, created_at')
+    .order('id', { ascending: false })
+    .limit(30);
+  return data ?? [];
+}
+
+export async function restoreRevision(id: number) {
+  const { data } = await client().from('revisions').select('html').eq('id', id).maybeSingle();
+  if (!data?.html) throw new Error('revision not found');
+  await saveDocument(data.html as string, `以前の版（#${id}）に戻しました`);
+}
