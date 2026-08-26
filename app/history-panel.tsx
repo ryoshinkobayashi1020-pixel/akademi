@@ -3,20 +3,20 @@ import { useEffect, useState } from 'react';
 
 type Revision = { id: number; summary: string; created_at: string };
 
-export default function HistoryPanel({ onRestored }: { onRestored: () => void }) {
+export default function HistoryPanel({ target, onRestored }: { target: 'main' | 'materials'; onRestored: () => void }) {
   const [open, setOpen] = useState(false);
   const [revisions, setRevisions] = useState<Revision[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
 
   async function load() {
-    const res = await fetch('/api/history');
+    const res = await fetch(`/api/history?target=${target}`);
     const data = (await res.json()) as { revisions?: Revision[] };
     setRevisions(data.revisions || []);
   }
 
   useEffect(() => {
     if (open) load();
-  }, [open]);
+  }, [open, target]);
 
   async function restore(id: number) {
     if (busyId) return;

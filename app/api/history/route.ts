@@ -1,9 +1,10 @@
 import { readRole } from '../../auth';
-import { listRevisions, restoreRevision } from '../../document-store';
+import { listRevisions, restoreRevision, MAIN_DOC, MATERIALS_DOC } from '../../document-store';
 
-export async function GET() {
+export async function GET(request: Request) {
   if ((await readRole()) !== 'admin') return Response.json({ error: '管理者のみ利用できます' }, { status: 403 });
-  const revisions = await listRevisions();
+  const target = new URL(request.url).searchParams.get('target');
+  const revisions = await listRevisions(target === 'materials' ? MATERIALS_DOC : MAIN_DOC);
   return Response.json({ revisions });
 }
 
