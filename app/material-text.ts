@@ -33,12 +33,11 @@ async function fetchAndExtract(url: string): Promise<{ content: string | null; s
     return { content: null, status: 'not-pdf' };
   }
   try {
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ data: buf });
-    const parsed = await parser.getText();
-    await parser.destroy();
-    const text = parsed.text.replace(/\s+/g, ' ').trim();
-    return { content: text.slice(0, 8000), status: 'ok' };
+    const { extractText, getDocumentProxy } = await import('unpdf');
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    return { content: cleaned.slice(0, 8000), status: 'ok' };
   } catch {
     return { content: null, status: 'parse-failed' };
   }
