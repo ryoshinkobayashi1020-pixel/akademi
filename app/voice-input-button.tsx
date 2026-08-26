@@ -1,79 +1,53 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onresult: ((e: any) => void) | null;
-  onerror: ((e: any) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
+import { useRef, useState } from 'react';
 
 export default function VoiceInputButton({ onResult }: { onResult: (text: string) => void }) {
-  const [listening, setListening] = useState(false);
-  const [supported, setSupported] = useState(true);
-  const recRef = useRef<SpeechRecognitionLike | null>(null);
-  const wantListeningRef = useRef(false);
-  const lastIndexRef = useRef(0);
+  const [recording, setRecording] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [supported] = useState(() => typeof window !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && !!window.MediaRecorder);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
-  useEffect(() => {
-    const Ctor = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!Ctor) {
-      setSupported(false);
-      return;
-    }
-    const rec: SpeechRecognitionLike = new Ctor();
-    rec.lang = 'ja-JP';
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onresult = (e: any) => {
-      let text = '';
-      for (let i = lastIndexRef.current; i < e.results.length; i++) {
-        if (e.results[i].isFinal) text += e.results[i][0].transcript;
-      }
-      lastIndexRef.current = e.results.length;
-      if (text.trim()) onResult(text);
-    };
-    rec.onerror = (e: any) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      wantListeningRef.current = false;
-      setListening(false);
-    };
-    rec.onend = () => {
-      if (wantListeningRef.current) {
-        lastIndexRef.current = 0;
-        try { rec.start(); } catch { /* already starting */ }
-      } else {
-        setListening(false);
+  async function start() {
+    if (recording || busy) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setBusy(true);
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      const form = new FormData();
+      form.append('audio', blob, 'speech.webm');
+      try {
+        const res = await fetch('/api/transcribe', { method: 'POST', body: form });
+        const data = (await res.json()) as { text?: string; error?: string };
+        if (data.text?.trim()) onResult(data.text.trim());
+      } finally {
+        setBusy(false);
       }
     };
-    recRef.current = rec;
-    return () => { wantListeningRef.current = false; rec.onend = null; rec.stop(); };
-  }, [onResult]);
+    recorderRef.current = recorder;
+    recorder.start();
+    setRecording(true);
+  }
 
-  function toggle() {
-    if (!recRef.current) return;
-    if (listening) {
-      wantListeningRef.current = false;
-      recRef.current.stop();
-      setListening(false);
-    } else {
-      wantListeningRef.current = true;
-      lastIndexRef.current = 0;
-      recRef.current.start();
-      setListening(true);
-    }
+  function stop() {
+    recorderRef.current?.stop();
+    setRecording(false);
   }
 
   if (!supported) return null;
   return (
-    <button type="button" className={`voice-button${listening ? ' listening' : ''}`} onClick={toggle} title="音声入力">
-      {listening ? '● 聞き取り中…（タップで停止）' : '🎤 音声入力'}
+    <button
+      type="button"
+      className={`voice-button${recording ? ' listening' : ''}`}
+      disabled={busy}
+      onClick={recording ? stop : start}
+      title="音声入力"
+    >
+      {busy ? '文字起こし中…' : recording ? '● 録音中…（タップで文字起こし）' : '🎤 音声入力'}
     </button>
   );
 }
