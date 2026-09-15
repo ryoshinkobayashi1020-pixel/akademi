@@ -76,18 +76,35 @@ export default function LibraryManager({
       return;
     }
     const failed: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      setProgress(`アップロード中…（${i + 1}/${files.length}）`);
-      try {
-        const fd = new FormData();
-        fd.append('path', paths[i]);
-        fd.append('file', files[i]);
-        const res = await fetch(`/api/library/${created.id}/files`, { method: 'POST', body: fd });
-        if (!res.ok) failed.push(paths[i]);
-      } catch {
-        failed.push(paths[i]);
+    let completed = 0;
+    const libraryId = created.id;
+    async function uploadOne(i: number) {
+      const fd = new FormData();
+      fd.append('path', paths[i]);
+      fd.append('file', files[i]);
+      const res = await fetch(`/api/library/${libraryId}/files`, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('upload failed');
+    }
+    let nextIndex = 0;
+    async function worker() {
+      for (;;) {
+        const i = nextIndex++;
+        if (i >= files.length) return;
+        try {
+          await uploadOne(i);
+        } catch {
+          try {
+            await uploadOne(i);
+          } catch {
+            failed.push(paths[i]);
+          }
+        }
+        completed++;
+        setProgress(`アップロード中…（${completed}/${files.length}）`);
       }
     }
+    const concurrency = Math.min(6, files.length);
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
     setProgress('');
     if (failed.length) {
       setError(`${failed.length}件のファイルをアップロードできませんでした（ファイルサイズが大きすぎる可能性があります）: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ' 他' : ''}`);

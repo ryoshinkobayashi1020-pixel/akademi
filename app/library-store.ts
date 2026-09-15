@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'crypto';
 
 const BUCKET = 'library';
 
@@ -98,18 +99,21 @@ function normalizeHtmlEncoding(path: string, buffer: Buffer): Buffer {
   return Buffer.from(text, 'utf-8');
 }
 
-function keyFor(files: Record<string, string>, path: string) {
-  const existing = files[path];
-  if (existing) return existing;
-  const index = Object.keys(files).length;
-  return `files/${index}.${safeExt(path)}`;
+// A pure function of the original path, so both creation (building the
+// manifest) and per-file upload can compute the same safe key without any
+// round trip to read existing state first — this matters when a folder
+// has hundreds of files, since every extra round trip multiplies the
+// total upload time.
+function keyFor(path: string) {
+  const hash = createHash('sha1').update(path).digest('hex').slice(0, 20);
+  return `files/${hash}.${safeExt(path)}`;
 }
 
 export async function createLibraryDocument(title: string, paths: string[]) {
   const id = `lib_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const entryPath = pickEntryPath(paths);
   const files: Record<string, string> = {};
-  for (const p of paths) files[p] = keyFor(files, p);
+  for (const p of paths) files[p] = keyFor(p);
   const now = new Date().toISOString();
   const meta: LibraryMeta = { title, entryPath, files, createdAt: now, updatedAt: now };
   await client()
@@ -119,17 +123,12 @@ export async function createLibraryDocument(title: string, paths: string[]) {
 }
 
 export async function uploadLibraryFile(id: string, path: string, buffer: Buffer) {
-  const meta = await getMeta(id);
-  if (!meta) throw new Error('not found');
-  const key = keyFor(meta.files, path);
+  const key = keyFor(path);
   const normalized = normalizeHtmlEncoding(path, buffer);
-  await client()
+  const { error } = await client()
     .storage.from(BUCKET)
     .upload(`${id}/${key}`, normalized, { contentType: contentTypeFor(path), upsert: true });
-  if (meta.files[path] !== key) {
-    meta.files[path] = key;
-    await writeMeta(id, meta);
-  }
+  if (error) throw new Error(error.message);
 }
 
 async function writeMeta(id: string, meta: LibraryMeta) {
@@ -192,7 +191,7 @@ export async function resolveLibraryEntry(id: string, meta: LibraryMeta) {
 export async function saveLibraryEntry(id: string, html: string) {
   const meta = await getMeta(id);
   if (!meta) throw new Error('not found');
-  const key = keyFor(meta.files, meta.entryPath);
+  const key = meta.files[meta.entryPath] || keyFor(meta.entryPath);
   await client()
     .storage.from(BUCKET)
     .upload(`${id}/${key}`, Buffer.from(html), { contentType: 'text/html; charset=utf-8', upsert: true });
