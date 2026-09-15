@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'アカデミー｜事業計画書',
-  description: '2026年11月事業計画書の閲覧・管理ポータル',
+  title: 'アカデミー｜2026年11月アカデミー事業',
+  description: '2026年11月アカデミー事業の閲覧・管理ポータル',
 };
 
 export default function RootLayout({
