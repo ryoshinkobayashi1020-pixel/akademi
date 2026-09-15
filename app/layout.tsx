@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'アカデミー｜2026年11月アカデミー事業',
-  description: '2026年11月アカデミー事業の閲覧・管理ポータル',
+  title: '白山青年会議所議案記入システム',
+  description: '白山青年会議所の議案の閲覧・管理ポータル',
 };
 
 export default function RootLayout({

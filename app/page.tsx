@@ -19,7 +19,7 @@ export default function LoginPage() {
   }
 
   return <main className="login-page"><section className="login-card">
-    <img className="login-wordmark" src="/assets/academy-wordmark-v2.png" alt="アカデミー" />
+    <img className="login-wordmark" src="/assets/academy-wordmark-v2.png" alt="白山青年会議所議案記入システム" />
     <form className="login-form" onSubmit={login}><input aria-label="パスワード" id="password" type="password" inputMode="numeric" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••" autoFocus />{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" disabled={loading || !password}>{loading ? '確認中…' : 'ログイン'}</button></form>
   </section></main>;
 }

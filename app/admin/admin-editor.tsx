@@ -90,7 +90,7 @@ export default function AdminEditor() {
       <header className="topbar">
         <div className="brand">
           <h1>2026年11月アカデミー事業</h1>
-          <p>アカデミー｜管理者編集</p>
+          <p>白山青年会議所議案記入システム｜管理者編集</p>
         </div>
         <div className="top-actions">
           {started && (

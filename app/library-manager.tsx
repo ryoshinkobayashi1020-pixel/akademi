@@ -16,8 +16,10 @@ export default function LibraryManager({
   const [items, setItems] = useState<Item[]>([]);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
+  const [fileCount, setFileCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
   const fileInputRef = useRef<PickerInput | null>(null);
   const fileInputRefCallback = useCallback((el: PickerInput | null) => {
     fileInputRef.current = el;
@@ -38,32 +40,63 @@ export default function LibraryManager({
   }, []);
 
   async function upload() {
+    setError('');
     const input = fileInputRef.current;
     const files = input?.files ? Array.from(input.files) : [];
-    if (!title.trim() || !files.length || busy) return;
+    if (!title.trim()) {
+      setError('議案名を入力してください');
+      return;
+    }
+    if (!files.length) {
+      setError('フォルダが選択されていません。「ファイルを選択」からアップロードしたいフォルダを選んでください。');
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     const paths = files.map((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name);
     setProgress('登録中…');
-    const createRes = await fetch('/api/library', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: title.trim(), paths }),
-    });
-    const created = (await createRes.json()) as { id?: string; error?: string };
-    if (!created.id) {
-      setProgress(created.error || '作成に失敗しました');
+    let created: { id?: string; error?: string };
+    try {
+      const createRes = await fetch('/api/library', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), paths }),
+      });
+      created = (await createRes.json()) as { id?: string; error?: string };
+    } catch {
+      setProgress('');
+      setError('通信エラーが発生しました。もう一度お試しください。');
       setBusy(false);
       return;
     }
+    if (!created.id) {
+      setProgress('');
+      setError(created.error || '作成に失敗しました');
+      setBusy(false);
+      return;
+    }
+    const failed: string[] = [];
     for (let i = 0; i < files.length; i++) {
       setProgress(`アップロード中…（${i + 1}/${files.length}）`);
-      const fd = new FormData();
-      fd.append('path', paths[i]);
-      fd.append('file', files[i]);
-      await fetch(`/api/library/${created.id}/files`, { method: 'POST', body: fd });
+      try {
+        const fd = new FormData();
+        fd.append('path', paths[i]);
+        fd.append('file', files[i]);
+        const res = await fetch(`/api/library/${created.id}/files`, { method: 'POST', body: fd });
+        if (!res.ok) failed.push(paths[i]);
+      } catch {
+        failed.push(paths[i]);
+      }
     }
     setProgress('');
+    if (failed.length) {
+      setError(`${failed.length}件のファイルをアップロードできませんでした（ファイルサイズが大きすぎる可能性があります）: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ' 他' : ''}`);
+      setBusy(false);
+      await load();
+      return;
+    }
     setTitle('');
+    setFileCount(0);
     if (input) input.value = '';
     await load();
     setAdding(false);
@@ -92,11 +125,18 @@ export default function LibraryManager({
       {adding && (
         <div className="library-add">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="議案名" />
-          <input type="file" multiple ref={fileInputRefCallback} />
-          <button type="button" disabled={busy || !title.trim()} onClick={upload}>
+          <input
+            type="file"
+            multiple
+            ref={fileInputRefCallback}
+            onChange={(e) => setFileCount(e.target.files?.length || 0)}
+          />
+          {fileCount > 0 && <p className="library-progress">{fileCount}件のファイルを選択中</p>}
+          <button type="button" disabled={busy} onClick={upload}>
             {busy ? 'アップロード中…' : 'このフォルダをアップロード'}
           </button>
           {progress && <p className="library-progress">{progress}</p>}
+          {error && <p className="form-error" role="alert">{error}</p>}
         </div>
       )}
       <div className="library-list">
