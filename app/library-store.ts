@@ -78,6 +78,26 @@ function pickEntryPath(paths: string[]) {
   return htmlPaths[0] || paths[0];
 }
 
+// Word/Excel "Web Page, Filtered" exports are frequently saved as
+// Shift_JIS (declared via <meta charset=shift_jis>) rather than UTF-8.
+// Reading those bytes as UTF-8 produces mojibake, so every uploaded
+// HTML file is normalized to UTF-8 up front, rewriting its own charset
+// declaration to match.
+function normalizeHtmlEncoding(path: string, buffer: Buffer): Buffer {
+  if (!/\.html?$/i.test(path)) return buffer;
+  const head = buffer.subarray(0, 4096).toString('latin1');
+  const declared = /charset=["']?([\w-]+)/i.exec(head)?.[1]?.toLowerCase();
+  if (!declared || declared === 'utf-8' || declared === 'utf8' || declared === 'us-ascii' || declared === 'ascii') return buffer;
+  let text: string;
+  try {
+    text = new TextDecoder(declared).decode(buffer);
+  } catch {
+    return buffer;
+  }
+  text = text.replace(/charset=["']?[\w-]+/i, 'charset=utf-8');
+  return Buffer.from(text, 'utf-8');
+}
+
 function keyFor(files: Record<string, string>, path: string) {
   const existing = files[path];
   if (existing) return existing;
@@ -102,9 +122,10 @@ export async function uploadLibraryFile(id: string, path: string, buffer: Buffer
   const meta = await getMeta(id);
   if (!meta) throw new Error('not found');
   const key = keyFor(meta.files, path);
+  const normalized = normalizeHtmlEncoding(path, buffer);
   await client()
     .storage.from(BUCKET)
-    .upload(`${id}/${key}`, buffer, { contentType: contentTypeFor(path), upsert: true });
+    .upload(`${id}/${key}`, normalized, { contentType: contentTypeFor(path), upsert: true });
   if (meta.files[path] !== key) {
     meta.files[path] = key;
     await writeMeta(id, meta);
