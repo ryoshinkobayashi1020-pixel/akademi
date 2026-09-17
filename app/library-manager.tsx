@@ -75,50 +75,73 @@ export default function LibraryManager({
       setBusy(false);
       return;
     }
-    const failed: string[] = [];
-    let completed = 0;
     const libraryId = created.id;
-    async function uploadOne(i: number) {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    async function uploadOnce(i: number) {
       const fd = new FormData();
       fd.append('path', paths[i]);
       fd.append('file', files[i]);
       const res = await fetch(`/api/library/${libraryId}/files`, { method: 'POST', body: fd });
       if (!res.ok) throw new Error('upload failed');
     }
+    async function uploadWithRetry(i: number, attempts = 5) {
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+          await uploadOnce(i);
+          return true;
+        } catch {
+          if (attempt < attempts) await wait(300 * attempt);
+        }
+      }
+      return false;
+    }
+    const failed: string[] = [];
+    let completed = 0;
     let nextIndex = 0;
     async function worker() {
       for (;;) {
         const i = nextIndex++;
         if (i >= files.length) return;
-        try {
-          await uploadOne(i);
-        } catch {
-          try {
-            await uploadOne(i);
-          } catch {
-            failed.push(paths[i]);
-          }
-        }
+        const ok = await uploadWithRetry(i);
+        if (!ok) failed.push(paths[i]);
         completed++;
         setProgress(`アップロード中…（${completed}/${files.length}）`);
       }
     }
-    const concurrency = Math.min(6, files.length);
+    const concurrency = Math.min(10, files.length);
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    // Retry any files that still failed, one at a time, before giving up.
+    for (const path of [...failed]) {
+      const i = paths.indexOf(path);
+      if (i === -1) continue;
+      setProgress(`仕上げ中…（${path}）`);
+      if (await uploadWithRetry(i, 3)) failed.splice(failed.indexOf(path), 1);
+    }
+
+    // Confirm the document actually opens before declaring success —
+    // catches the rare case where the entry file itself needs one more try.
+    setProgress('確認中…');
+    let opensOk = false;
+    for (let attempt = 0; attempt < 3 && !opensOk; attempt++) {
+      if (attempt > 0) await wait(500);
+      const check = await fetch(`/api/library/${libraryId}`).catch(() => null);
+      opensOk = !!check && check.ok;
+    }
+
     setProgress('');
-    if (failed.length) {
-      setError(`${failed.length}件のファイルをアップロードできませんでした（ファイルサイズが大きすぎる可能性があります）: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? ' 他' : ''}`);
+    await load();
+    if (!opensOk || failed.length) {
+      setError('アップロードを処理しています。少し待ってから議案名をクリックして開いてみてください。');
       setBusy(false);
-      await load();
       return;
     }
     setTitle('');
     setFileCount(0);
     if (input) input.value = '';
-    await load();
     setAdding(false);
     setBusy(false);
-    onOpen(created.id);
+    onOpen(libraryId);
   }
 
   async function remove(item: Item) {
